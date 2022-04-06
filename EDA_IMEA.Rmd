@@ -1,0 +1,186 @@
+---
+title: "IMEA"
+author: "Igor Luna Detoni, Cíntia R Consonni, Victor V B e Guilherme B Rosa"
+date: "05/03/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# use_github(protocol = 'https', auth_token = Sys.getenv("GITHUB_PAT"))
+```
+
+## Carregando os pacotes e os dados
+
+```{r,  error=FALSE, warning=FALSE, message=FALSE, echo=FALSE}
+library(tidyverse)
+library(dplyr)
+library(forecast)
+library(tseries)
+library(urca)
+library(Quandl)
+library(dplyr)
+library(ggplot2)
+library(fGarch)
+library(rugarch)
+library(FinTS)
+library(xts)
+library(prophet)
+library(NTS)
+library(gridExtra)
+library(lubridate)
+library(zoo)
+library(readr)
+library(NFCP)
+```
+
+## Carregando dados
+
+```{r, error=FALSE, warning=FALSE, message=FALSE, echo=FALSE}
+setwd("C:/Users/igor-/OneDrive/Área de Trabalho/Deepen/IMEA/")
+x<-readxl::read_excel(path = 'IMEA/dados (1)/1.xls', sheet = NULL)
+y<-readxl::read_excel(path = 'IMEA/dados (1)/2.xls', sheet = NULL)
+
+df<-rbind(x,y)
+rm(x)
+rm(y)
+
+```
+
+```{r}
+
+USD_BRL <- readxl::read_excel("USD_BRL2.xlsx")
+USD_BRL2 <- readxl::read_excel("USD_BRL3.xlsx")
+```
+
+```{r}
+Joined <- left_join(df, USD_BRL, by = "Data")
+```
+
+### Ajuste por dólar
+
+```{r}
+Joined<-Joined %>% mutate(Valor_dólar = Valor/Último)
+rm(USD_BRL,USD_BRL2)
+
+```
+
+```{r, echo=FALSE}
+
+
+df %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível")    
+p1<-df %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível")
+
+```
+
+```{r}
+
+p0 <- dplyr::filter(df, Cadeia=="Algodão")%>% dplyr::filter(Indicador=="Preço de pluma disponível") %>% ggplot(aes(x=Data, y=Valor)) +
+  geom_line() +
+  geom_point(aes(color=Macrorregião)) +
+  xlab('Data') + ylab('Preço de pluma disponível')
+p0
+
+
+```
+## Valor em Dólar
+```{r}
+p0 <- dplyr::filter(Joined, Cadeia=="Algodão")%>% dplyr::filter(Indicador=="Preço de pluma disponível") %>% ggplot(aes(x=Data, y=Valor_dólar)) +
+  geom_line() +
+  geom_point(aes(color=Macrorregião)) +
+  xlab('Data') + ylab('Preço de pluma disponível')
+p0
+
+```
+
+
+### Gráfico de log-Preços² pluma
+
+```{r warning = FALSE, message = FALSE}
+select <-p1 %>%
+  select(Data,Macrorregião,Valor) %>% dplyr::filter(Macrorregião != 'NA')%>%
+  mutate(ret2= log(Valor))
+
+ggplot(select, aes(x=Data, y=ret2, group=Macrorregião)) +
+  geom_line(aes(color=Macrorregião))+
+  geom_point(aes(color=Macrorregião))+
+  theme(legend.position="top")+
+  xlab('Data')+ylab('Retornos ao quadrado')
+```
+
+
+```{r}
+
+select <-Joined %>%  select(Data,Macrorregião,Valor_dólar) %>% dplyr::filter(Macrorregião != 'NA') %>%
+  mutate(ret2= log(Valor_dólar))
+
+ggplot(select, aes(x=Data, y=ret2, group=Macrorregião)) +
+  geom_line(aes(color=Macrorregião))+
+  geom_point(aes(color=Macrorregião))+
+  theme(legend.position="top")+
+  xlab('Data')+ylab('Retornos ao quadrado')
+
+```
+
+### ACF:
+
+```{r}
+ret <- df$Valor[-1]
+ret2 <- df$Valor[-1]^2
+
+Acf(ret,60, na.action = na.pass)
+Acf(df$Valor,60, na.action = na.pass)
+Acf(ret2,60, na.action = na.pass)
+Acf(ret2,60,type="partial", na.action = na.pass)
+
+```
+
+## Tirando a diferença para transformar em uma série estacionária
+
+```{r}
+Acf(diff(ret),60, na.action = na.pass)
+Acf(diff(df$Valor),60, na.action = na.pass)
+Acf(diff(ret2),60, na.action = na.pass)
+Acf(diff(ret2),60,type="partial", na.action = na.pass)
+
+
+
+```
+
+## Dickey Fuller Test (ADF)
+
+A série não é uma série estacionária e nem o log Porém a diferença da P1 é estacionária
+
+```{r}
+adf.test(p1$Valor)
+adf.test(log(p1$Valor))
+adf.test(diff(p1$Valor))
+
+```
+
+Teste Arch
+
+Não podemos usar um modelo GARCH nesse conjunto de dados
+
+```{r}
+ArchTest(log(p1$Valor))
+
+```
+
+```{r}
+# Parametros NFCP
+model_parameters_2F <- NFCP_parameters(N_factors = 2,
+                                      GBM = TRUE,
+                                      initial_states = FALSE,
+                                      N_ME = 5)
+print(model_parameters_2F)
+
+```
+
+```{r}
+# SS_oil_stitched <- stitch_contracts(futures = SS_oil$contracts,
+# futures_TTM = c(1, 5, 9, 13, 17)/12, maturity_matrix = SS_oil$contract_maturities,
+# rollover_frequency = 1/12, verbose = TRUE)
+
+```
+
