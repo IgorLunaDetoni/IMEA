@@ -32,6 +32,28 @@ library(lubridate)
 library(zoo)
 library(readr)
 library(NFCP)
+
+library(knitr)
+hook_output <- knit_hooks$get("output")
+knit_hooks$set(output = function(x, options) {
+  lines <- options$output.lines
+  if (is.null(lines)) {
+    return(hook_output(x, options)) 
+  }
+  x <- unlist(strsplit(x, "\n"))
+  more <- "..."
+  if (length(lines)==1) {        
+    if (length(x) > lines) {
+      
+      x <- c(head(x, lines), more)
+    }
+  } else {
+    x <- c(more, x[lines], more)
+  }
+ 
+  x <- paste(c(x, ""), collapse = "\n")
+  hook_output(x, options)
+})
 ```
 
 ## Carregando dados
@@ -69,7 +91,7 @@ rm(USD_BRL,USD_BRL2)
 
 
 df %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível")    
-p1<-df %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível")
+p1<-Joined %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível")
 
 ```
 
@@ -98,8 +120,8 @@ p0
 
 ```{r warning = FALSE, message = FALSE}
 select <-p1 %>%
-  select(Data,Macrorregião,Valor) %>% dplyr::filter(Macrorregião != 'NA')%>%
-  mutate(ret2= log(Valor))
+  select(Data,Macrorregião,Valor_dólar) %>% dplyr::filter(Macrorregião != 'NA')%>%
+  mutate(ret2= log(Valor_dólar))
 
 ggplot(select, aes(x=Data, y=ret2, group=Macrorregião)) +
   geom_line(aes(color=Macrorregião))+
@@ -125,11 +147,11 @@ ggplot(select, aes(x=Data, y=ret2, group=Macrorregião)) +
 ### ACF:
 
 ```{r}
-ret <- df$Valor[-1]
-ret2 <- df$Valor[-1]^2
+ret <- p1$Valor[-1]
+ret2 <- p1$Valor[-1]^2
 
 Acf(ret,60, na.action = na.pass)
-Acf(df$Valor,60, na.action = na.pass)
+Acf(p1$Valor,60, na.action = na.pass)
 Acf(ret2,60, na.action = na.pass)
 Acf(ret2,60,type="partial", na.action = na.pass)
 
@@ -139,7 +161,7 @@ Acf(ret2,60,type="partial", na.action = na.pass)
 
 ```{r}
 Acf(diff(ret),60, na.action = na.pass)
-Acf(diff(df$Valor),60, na.action = na.pass)
+Acf(diff(p1$Valor_dólar),60, na.action = na.pass)
 Acf(diff(ret2),60, na.action = na.pass)
 Acf(diff(ret2),60,type="partial", na.action = na.pass)
 
@@ -158,14 +180,73 @@ adf.test(diff(p1$Valor))
 
 ```
 
-Teste Arch
+#### Teste Arch
 
 Não podemos usar um modelo GARCH nesse conjunto de dados
 
 ```{r}
-ArchTest(log(p1$Valor))
+ArchTest(log(p1$Valor_dólar))
 
 ```
+#### Tratamento para time series
+```{r}
+set.seed(123)
+rm(df,p0, select)
+
+algodao_timeseries <- p1 %>%select(c(Data,Valor_dólar))
+algodao_timeseries$Data <- ymd(algodao_timeseries$Data)
+algodao_timeseries <- algodao_timeseries %>% na.omit()
+
+inds <- seq(as.Date("2019-02-01"), as.Date("2022-02-01"), by = "day")
+
+
+algodao_timeseries2 <- ts(algodao_timeseries,     # Dados
+           start = c(2019, as.numeric(format(inds[1], "%j"))),
+           frequency = 365)
+
+```
+```{r}
+plot.ts(algodao_timeseries2)
+```
+### Decomposição série
+```{r,  output.lines=8}
+
+decompose(algodao_timeseries2)
+```
+```{r}
+
+algodao_timeseries2 [,2] %>%
+  decompose() %>%
+  autoplot()
+```
+
+
+
+```{r}
+algodao_timeseries2[,2] %>%
+  stl(s.window = "periodic") %>%
+  autoplot()
+```
+
+
+
+```{r}
+## use auto.arima to choose ARIMA terms
+fit <- auto.arima(algodao_timeseries2 [,2])
+## forecast for next 60 time points
+fore <- forecast(fit, h = 60)
+## plot it
+plot(fore)
+```
+
+
+
+
+
+
+
+
+
 
 ```{r}
 # Parametros NFCP
@@ -178,7 +259,9 @@ print(model_parameters_2F)
 ```
 
 ```{r}
-# SS_oil_stitched <- stitch_contracts(futures = SS_oil$contracts,
+# Cada região possui um valor diferente da pluma de algodão
+
+# stitched <- stitch_contracts(futures = SS_oil$contracts,
 # futures_TTM = c(1, 5, 9, 13, 17)/12, maturity_matrix = SS_oil$contract_maturities,
 # rollover_frequency = 1/12, verbose = TRUE)
 
