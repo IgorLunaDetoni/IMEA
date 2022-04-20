@@ -206,17 +206,24 @@ algodao_timeseries2 <- ts(algodao_timeseries,     # Dados
 
 ```
 ```{r}
+#Pra não ter probblema com o time series do TBATS
+x.msts <- msts(algodao_timeseries[,2],seasonal.periods=c(7,365.3))
+decompose(x.msts) %>% autoplot()
+```
+
+```{r}
 plot.ts(algodao_timeseries2)
 ```
-### Decomposição série
+### Decomposição aditiva da série  
 ```{r,  output.lines=8}
 
 decompose(algodao_timeseries2)
 ```
+##### Decomposição multiplicativa
 ```{r}
 
 algodao_timeseries2 [,2] %>%
-  decompose() %>%
+  decompose(type = "multiplicative") %>%
   autoplot()
 ```
 
@@ -257,6 +264,20 @@ model_parameters_2F <- NFCP_parameters(N_factors = 2,
 print(model_parameters_2F)
 
 ```
+
+#### Aplicando TBATs
+
+```{r}
+model <- tbats(x.msts)
+
+
+plot(forecast(model,h=100))
+
+
+```
+
+
+
 
 ```{r}
 # Cada região possui um valor diferente da pluma de algodão
