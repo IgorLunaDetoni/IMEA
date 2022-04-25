@@ -87,11 +87,15 @@ rm(USD_BRL,USD_BRL2)
 
 ```
 
-```{r, echo=FALSE}
+#### Cada região tem um valor completamente diferente
+Logo precisamos fazer uma previsão diferente pra cada região
 
+```{r, echo=FALSE}
 
 df %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível")    
 p1<-Joined %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível")
+
+Primeira_região<-Joined %>% dplyr::filter(Cadeia=="Algodão") %>% dplyr::filter(Indicador=="Preço de pluma disponível") %>% dplyr::filter(Macrorregião=="Centro-Sul")
 
 ```
 
@@ -105,7 +109,9 @@ p0
 
 
 ```
+
 ## Valor em Dólar
+
 ```{r}
 p0 <- dplyr::filter(Joined, Cadeia=="Algodão")%>% dplyr::filter(Indicador=="Preço de pluma disponível") %>% ggplot(aes(x=Data, y=Valor_dólar)) +
   geom_line() +
@@ -119,7 +125,7 @@ p0
 ### Gráfico de log-Preços² pluma
 
 ```{r warning = FALSE, message = FALSE}
-select <-p1 %>%
+select <-Primeira_região %>%
   select(Data,Macrorregião,Valor_dólar) %>% dplyr::filter(Macrorregião != 'NA')%>%
   mutate(ret2= log(Valor_dólar))
 
@@ -144,14 +150,15 @@ ggplot(select, aes(x=Data, y=ret2, group=Macrorregião)) +
 
 ```
 
+## A primeira Macro região que vamos trabalhar é a Centro-Sul
 ### ACF:
 
 ```{r}
-ret <- p1$Valor[-1]
-ret2 <- p1$Valor[-1]^2
+ret <- Primeira_região$Valor[-1]
+ret2 <- Primeira_região$Valor[-1]^2
 
 Acf(ret,60, na.action = na.pass)
-Acf(p1$Valor,60, na.action = na.pass)
+Acf(Primeira_região$Valor,60, na.action = na.pass)
 Acf(ret2,60, na.action = na.pass)
 Acf(ret2,60,type="partial", na.action = na.pass)
 
@@ -161,7 +168,7 @@ Acf(ret2,60,type="partial", na.action = na.pass)
 
 ```{r}
 Acf(diff(ret),60, na.action = na.pass)
-Acf(diff(p1$Valor_dólar),60, na.action = na.pass)
+Acf(diff(Primeira_região$Valor_dólar),60, na.action = na.pass)
 Acf(diff(ret2),60, na.action = na.pass)
 Acf(diff(ret2),60,type="partial", na.action = na.pass)
 
@@ -170,32 +177,39 @@ Acf(diff(ret2),60,type="partial", na.action = na.pass)
 ```
 
 ## Dickey Fuller Test (ADF)
-
+Lembrando que estamos trabalhando apenas com a região Centro-Sul do Mato grosso
 A série não é uma série estacionária e nem o log Porém a diferença da P1 é estacionária
 
 ```{r}
-adf.test(p1$Valor)
-adf.test(log(p1$Valor))
-adf.test(diff(p1$Valor))
+adf.test(Primeira_região$Valor)
+adf.test(log(Primeira_região$Valor))
+adf.test(diff(Primeira_região$Valor))
 
 ```
 
 #### Teste Arch
 
-Não podemos usar um modelo GARCH nesse conjunto de dados
+Ou seja p-valor é muito pequeno logo rejeitamos a hipótese nula de que não há efeito ARCH
+Logo podemos trabalhar com modelos ARCH
 
 ```{r}
-ArchTest(log(p1$Valor_dólar))
+ArchTest(log(Primeira_região$Valor_dólar))
+
 
 ```
+
 #### Tratamento para time series
+
 ```{r}
 set.seed(123)
 rm(df,p0, select)
 
-algodao_timeseries <- p1 %>%select(c(Data,Valor_dólar))
+algodao_timeseries <- Primeira_região %>%select(c(Data,Valor_dólar,Cidade))
+# algodao_timeseries <- algodao_timeseries %>%  dplyr::filter(Cidade == "Diamantino") 
+algodao_timeseries <- Primeira_região %>%select(c(Data,Valor_dólar))
 algodao_timeseries$Data <- ymd(algodao_timeseries$Data)
 algodao_timeseries <- algodao_timeseries %>% na.omit()
+
 
 inds <- seq(as.Date("2019-02-01"), as.Date("2022-02-01"), by = "day")
 
@@ -205,10 +219,12 @@ algodao_timeseries2 <- ts(algodao_timeseries,     # Dados
            frequency = 365)
 
 ```
+
+
 ```{r}
 #Pra não ter probblema com o time series do TBATS
-x.msts <- msts(algodao_timeseries[,2],seasonal.periods=c(7,365.3))
-decompose(x.msts) %>% autoplot()
+x.msts <- msts(algodao_timeseries1[,2],seasonal.periods=c(7,365.3))
+decompose(x.msts[,1]) %>% autoplot()
 ```
 
 ```{r}
@@ -217,7 +233,8 @@ plot.ts(algodao_timeseries2)
 ### Decomposição aditiva da série  
 ```{r,  output.lines=8}
 
-decompose(algodao_timeseries2)
+decompose(algodao_timeseries2[,2])%>%
+  autoplot()
 ```
 ##### Decomposição multiplicativa
 ```{r}
@@ -227,14 +244,13 @@ algodao_timeseries2 [,2] %>%
   autoplot()
 ```
 
-
+##### Decomposição com janelas periódicas
 
 ```{r}
 algodao_timeseries2[,2] %>%
   stl(s.window = "periodic") %>%
   autoplot()
 ```
-
 
 
 ```{r}
@@ -249,11 +265,15 @@ plot(fore)
 
 
 
+#### Aplicando TBATs
+
+```{r}
+model <- tbats(x.msts)
 
 
+plot(forecast(model,h=90))
 
-
-
+```
 
 ```{r}
 # Parametros NFCP
@@ -265,26 +285,10 @@ print(model_parameters_2F)
 
 ```
 
-#### Aplicando TBATs
-
-```{r}
-model <- tbats(x.msts)
-
-
-plot(forecast(model,h=100))
-
-
-```
-
-
-
-
 ```{r}
 # Cada região possui um valor diferente da pluma de algodão
 
-# stitched <- stitch_contracts(futures = SS_oil$contracts,
-# futures_TTM = c(1, 5, 9, 13, 17)/12, maturity_matrix = SS_oil$contract_maturities,
-# rollover_frequency = 1/12, verbose = TRUE)
+# Aplicar um windowed por que tá pegando um espaço muito grande de tempo e a sazonalidade tá bugada
 
 ```
 
