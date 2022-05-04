@@ -73,6 +73,7 @@ rm(y)
 
 USD_BRL <- readxl::read_excel("USD_BRL2.xlsx")
 USD_BRL2 <- readxl::read_excel("USD_BRL3.xlsx")
+
 ```
 
 ```{r}
@@ -84,6 +85,7 @@ Joined <- left_join(df, USD_BRL, by = "Data")
 ```{r}
 Joined<-Joined %>% mutate(Valor_dólar = Valor/Último)
 rm(USD_BRL,USD_BRL2)
+
 
 ```
 
@@ -193,6 +195,7 @@ Ou seja p-valor é muito pequeno logo rejeitamos a hipótese nula de que não h�
 Logo podemos trabalhar com modelos ARCH
 
 ```{r}
+
 ArchTest(log(Primeira_região$Valor_dólar))
 
 
@@ -201,6 +204,7 @@ ArchTest(log(Primeira_região$Valor_dólar))
 #### Tratamento para time series
 
 ```{r}
+
 set.seed(123)
 rm(df,p0, select)
 
@@ -218,17 +222,23 @@ algodao_timeseries2 <- ts(algodao_timeseries,     # Dados
            start = c(2019, as.numeric(format(inds[1], "%j"))),
            frequency = 365)
 
+
 ```
 
 
 ```{r}
+
 #Pra não ter probblema com o time series do TBATS
-x.msts <- msts(algodao_timeseries1[,2],seasonal.periods=c(7,365.3))
+x.msts <- msts(algodao_timeseries[,2],seasonal.periods=c(7,365.3))
 decompose(x.msts[,1]) %>% autoplot()
+
 ```
 
+
 ```{r}
+
 plot.ts(algodao_timeseries2)
+
 ```
 ### Decomposição aditiva da série  
 ```{r,  output.lines=8}
@@ -242,14 +252,17 @@ decompose(algodao_timeseries2[,2])%>%
 algodao_timeseries2 [,2] %>%
   decompose(type = "multiplicative") %>%
   autoplot()
+
 ```
 
 ##### Decomposição com janelas periódicas
 
 ```{r}
+
 algodao_timeseries2[,2] %>%
   stl(s.window = "periodic") %>%
   autoplot()
+
 ```
 
 
@@ -257,9 +270,10 @@ algodao_timeseries2[,2] %>%
 ## use auto.arima to choose ARIMA terms
 fit <- auto.arima(algodao_timeseries2 [,2])
 ## forecast for next 60 time points
-fore <- forecast(fit, h = 60)
+fore <- forecast(fit, h = 90)
 ## plot it
 plot(fore)
+
 ```
 
 
@@ -275,6 +289,17 @@ plot(forecast(model,h=90))
 
 ```
 
+
+### Auto Arima best order
+```{r}
+
+modArima<-auto.arima(algodao_timeseries$Valor_dólar,D=7,max.P = 5, max.Q = 5)
+bestOrder <- cbind(modArima$arma[1],modArima$arma[5],modArima$arma[2])
+sarima1<-arima(algodao_timeseries$Valor_dólar, order = c(4,1,3))
+
+```
+
+
 ```{r}
 # Parametros NFCP
 model_parameters_2F <- NFCP_parameters(N_factors = 2,
@@ -283,12 +308,36 @@ model_parameters_2F <- NFCP_parameters(N_factors = 2,
                                       N_ME = 5)
 print(model_parameters_2F)
 
+
 ```
 
 ```{r}
+
+# SS_oil_stitched <- stitch_contracts(futures = SS_oil$contracts,
+# futures_TTM = c(1, 5, 9, 13, 17)/12, maturity_matrix = SS_oil$contract_maturities,
+# rollover_frequency = 1/12, verbose = TRUE)
+
+```
+
+
+
+```{r}
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
 # Cada região possui um valor diferente da pluma de algodão
 
-# Aplicar um windowed por que tá pegando um espaço muito grande de tempo e a sazonalidade tá bugada
+# Aplicar um windowed por que tá pegando um espaço muito grande de tempo e a sazonalidade tá bugada 
+
 
 ```
 
