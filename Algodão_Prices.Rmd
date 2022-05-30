@@ -1,0 +1,235 @@
+---
+title: "Algodão"
+output: html_document
+date: '2022-05-18'
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(highcharter)
+library(forecast)
+library(FinTS)
+library(tseries)
+library(ggplot2)
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Importando os dados
+```{r}
+x<-readxl::read_excel(path = '../Dados_Algodão/1.xls', sheet = NULL)
+
+USD_BRL <- readxl::read_excel("USD_BRL2.xlsx")
+USD_BRL2 <- readxl::read_excel("USD_BRL3.xlsx")
+
+Joined <- left_join(x, USD_BRL, by = "Data")
+```
+
+```{r, echo=FALSE}
+
+rm(USD_BRL, USD_BRL2)
+```
+
+### Ajuste por dólar
+
+```{r}
+
+Joined<-Joined %>% mutate(Valor_dólar = Valor/Último)
+rm(x)
+```
+
+
+
+```{r}
+
+ret <- Joined %>%dplyr::filter(Macrorregião == "Sudeste")%>%dplyr::filter(Cidade == "Rondonópolis") %>%  select(Valor)
+ret <- ret$Valor[-1]
+ret2 <- ret^2
+
+
+Acf((ret),60, na.action = na.pass)
+Acf(diff(ret),60, na.action = na.pass)
+Acf((ret2[-1]),60, na.action = na.pass)
+Acf(diff(ret2[-1]),60,type="partial", na.action = na.pass)
+
+
+
+```
+
+
+```{r}
+Algodao_Rond<-Joined %>%dplyr::filter(Macrorregião == "Sudeste")%>%dplyr::filter(Cidade == "Rondonópolis") 
+
+
+```
+
+
+```{r}
+adf.test(Algodao_Rond$Valor)
+adf.test(log(Algodao_Rond$Valor))
+adf.test(diff(Algodao_Rond$Valor))
+
+
+
+
+```
+
+```{r}
+ggplot(Algodao_Rond, aes(x=Data, y=Valor)) +
+  geom_line(aes(color=Cidade))+
+  geom_point(aes(color=Cidade))+
+  theme(legend.position="top")+
+  xlab('Data')+ylab('Retornos ao quadrado')
+```
+
+
+```{r}
+
+ArchTest((Algodao_Rond$Valor))
+ArchTest(log(Algodao_Rond$Valor))
+```
+# Transformando em série temporal
+Usando o pacote stats para criar uma série
+
+```{r}
+
+Algodao_Rond <- Algodao_Rond %>%select(c(Data,Valor))
+Algodao_Rond$Data2<-as.Date(Algodao_Rond$Data, "%Y-%m-%d")
+
+dfts <- ts(Algodao_Rond$Valor, frequency=237, start=c(2017,06,01))
+
+```
+
+
+```{r}
+decompose(dfts) %>% autoplot()
+```
+
+A decomposição da série dá erro dependendo de como é formada, é preciso indicar exatamente como está funcionando os ciclos de sazonalidade
+
+Um Work around é utilizar o algoritmo de Holtwinters com o gamma = FALSO 
+Indicando a abstinência de sazonalidade 
+
+Porém nessa série temporal é possível indicar a sazonalidade e a tendencia portando podemos indicar beta = TRUE e gamma = TRUE
+
+
+## Holt Winters
+
+```{r}
+
+Arrival.Forecasts = HoltWinters(dfts,beta = TRUE, 
+gamma = TRUE)
+
+plot(Arrival.Forecasts)
+
+```
+O Modelo de Holt Winters ficou bem comportado e se aplica nesse caso utilizando sazonalidade e tendência
+
+
+### Criando um modelo com parâmetros customizados 
+
+```{r}
+HW1 <- HoltWinters(dfts)
+# Custom HoltWinters fitting
+HW2 <- HoltWinters(dfts, alpha=0.1, beta=0.2, gamma=0.2)
+#Visually evaluate the fits
+plot(dfts, ylab="candy production", xlim=c(2017,2022))
+lines(HW1$fitted[,1], lty=2, col="blue")
+lines(HW2$fitted[,1], lty=2, col="red")
+
+```
+
+```{r}
+
+HW1.pred <- predict(HW1, 24, prediction.interval = TRUE, level=0.95)
+#Visually evaluate the prediction
+plot(dfts, ylab="candy production", xlim=c(2017,2022))
+lines(HW1$fitted[,1], lty=2, col="blue")
+lines(HW1.pred[,1], col="red")
+lines(HW1.pred[,2], lty=2, col="orange")
+lines(HW1.pred[,3], lty=2, col="orange")
+```
+
+```{r}
+
+HW1.pred <- predict(HW1, 24, prediction.interval = TRUE, level=0.95)
+#Visually evaluate the prediction
+plot(dfts, ylab="candy production", xlim=c(2017,2022))
+lines(HW1$fitted[,1], lty=2, col="blue")
+lines(HW1.pred[,1], col="red")
+lines(HW1.pred[,2], lty=2, col="orange")
+lines(HW1.pred[,3], lty=2, col="orange")
+
+
+```
+
+# Holtwinters e Forecast
+
+```{r}
+
+HW1_for <- forecast(HW1, h=24, level=c(80,95))
+#visualize our predictions:
+plot(HW1_for, xlim=c(2017,2022))
+lines(HW1_for$fitted, lty=2, col="purple")
+
+
+```
+
+Forecast também calcula a qualidade das predições (Compilando os valores observados - Valores preditos). 
+
+Esses estão localizados no modelo como $residuals. Para avaliar o smoothing utilizado nas funções do nosso modelo,
+vamos ver as correlações entre os erros de predições.
+
+
+Se os dados em nossos ajustes predizem de forma errônea continuamente os valores observados, nossos parâmetros não estão corretamente ajustados e o modelo não é reativo o suficiente para as mudanças nos dados.
+
+Para capturar isso, usamos a função acf para avaliar a correlação dos resíduos entre pontos de dados em várias faixas temporais na série (lag). Para atraso diferente de zero, o ideal é que as linhas de ACF estejam dentro das linhas azuis. É importante usar na.action=na.pass
+
+```{r}
+acf(HW1_for$residuals, lag.max=20, na.action=na.pass)
+Box.test(HW1_for$residuals, lag=20, type="Ljung-Box")
+hist(HW1_for$residuals)
+
+
+```
+
+
+
+O teste de Ljung-box pode indicar também a presença dessas correlações. Desde que o p-value > 0.05 tem uma chance de 95% dos resíduos serem independentes. Depois podemos verificar em um histograma se os residuos parecem uma distribuição normal, se os residuos estivessem com muito Skewness o modelo estaria superestimando valores em alguma direção, o que não é o caso como mostrado acima.
+
+# Previsão ARIMA
+
+```{r}
+## use auto.arima to choose ARIMA terms
+fit <- auto.arima(dfts)
+## forecast for next 60 time points
+fore <- forecast(fit, h = 60)
+## plot it
+plot(fore)
+
+
+```
+
+# Previsão com TBATS
+
+```{r}
+model <- tbats(dfts)
+
+
+plot(forecast(model,h=60))
+
+
+```
+
+
+# GARCH e ARCH
+
+```{r}
+
+
+
+```
+
+
