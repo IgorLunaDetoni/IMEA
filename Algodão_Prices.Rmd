@@ -15,7 +15,7 @@ library(plotly)
 library(hrbrthemes)
 library(skimr)
 library(rio)
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, output.lines=12)
 
 ```
 
@@ -88,7 +88,18 @@ Acf(diff(ret2[-1]),60,type="partial", na.action = na.pass)
 
 ```
 
+```{r}
 
+ggplot(Joined, aes(x = Data, y = Valor)) + 
+  geom_line(aes(color = Cidade),size = 1.5) +
+  theme_minimal()
+
+```
+
+
+## Selecionando apenas uma cidade
+
+Vamos selecionar apenas uma cidade para realizar os modelos
 ```{r}
 Algodao_Rond<-Joined %>%dplyr::filter(Macrorregião == "Sudeste")%>%dplyr::filter(Cidade == "Rondonópolis") 
 
@@ -112,16 +123,6 @@ ggplot(Algodao_Rond, aes(x=Data, y=Valor)) +
   geom_point(aes(color=Cidade))+
   theme(legend.position="top")+
   xlab('Data')+ylab('Retornos ao quadrado')
-```
-
-
-```{r}
-
-Algodao_Rond %>%
-  ggplot( aes(x=Data, y=Valor)) +
-    geom_line(color="green") +
-    ylab("bitcoin price ($)")
-
 ```
 
 ```{r}
@@ -163,6 +164,15 @@ Algodao_Rond$Data2<-as.Date(Algodao_Rond$Data, "%Y-%m-%d")
 dfts <- ts(Algodao_Rond$Valor, frequency=237, start=c(2017,06,01))
 
 ```
+```{r}
+
+plot(dfts,
+  lty = c("dotted", "solid"), main = "Plot série temporal",
+  legend.loc = "left"
+)
+
+```
+
 
 
 ```{r}
@@ -309,8 +319,8 @@ plot(model_TBATS,main =paste("Modelo TBATS"),xlab = "Data",ylab = "y_lab")
 
 ```
 Predict usando TBATs
-```{r}
-
+```{r, results='hide'}
+tbats.components(model_TBATS)
 forecasting_tbats <- predict(model_TBATS, h=N_forecasting_days+validation_data_days)
 ```
 
@@ -350,13 +360,7 @@ autoplot(fc_na) +
 ```
 
 
-```{r}
 
-ggplot(Joined, aes(x = Data, y = Valor)) + 
-  geom_line(aes(color = Cidade),size = 1.5) +
-  theme_minimal()
-
-```
 
 ```{r}
 
