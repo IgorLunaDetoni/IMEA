@@ -6,12 +6,15 @@ date: '2022-05-18'
 
 ```{r setup, include=FALSE}
 library(dplyr)
-library(highcharter)
 library(forecast)
 library(FinTS)
 library(tseries)
 library(ggplot2)
-
+library(tidyverse)
+library(plotly)
+library(hrbrthemes)
+library(skimr)
+library(rio)
 knitr::opts_chunk$set(echo = TRUE)
 
 ```
@@ -40,6 +43,33 @@ Joined<-Joined %>% mutate(Valor_dólar = Valor/Último)
 rm(x)
 ```
 
+
+```{r}
+
+skim(Joined)
+
+apply(Joined, 2, function(x) any(is.na(x)))
+
+```
+
+
+
+Removendo cidades com poucos dados
+```{r}
+
+Joined<-Joined %>% 
+  group_by(Cidade) %>% 
+  filter(n() >= 50)
+
+# Cidades<-Joined %>% 
+#   group_by(Cidade) %>% count() %>% 
+#   filter(n >= 50)
+# 
+# Cidades<-Cidades$Cidade
+# 
+# subset(Joined, Cidade %in%  Cidades)
+
+```
 
 
 ```{r}
@@ -87,6 +117,38 @@ ggplot(Algodao_Rond, aes(x=Data, y=Valor)) +
 
 ```{r}
 
+Algodao_Rond %>%
+  ggplot( aes(x=Data, y=Valor)) +
+    geom_line(color="green") +
+    ylab("bitcoin price ($)")
+
+```
+
+```{r}
+Algodao_Rond <- Algodao_Rond %>%select(c(Data,Valor))
+Algodao_Rond$Data2<-as.Date(Algodao_Rond$Data, "%Y-%m-%d")
+
+dfts <- ts(Algodao_Rond$Valor, frequency=237, start=c(2017,06,01))
+# data <- xts(x = Algodao_Rond$Valor, order.by = Algodao_Rond$Data)
+
+
+
+```
+
+Limpeza dos dados e retirando outliers 
+
+```{r}
+
+dfts<-tsclean(dfts)
+
+
+```
+
+
+
+
+```{r}
+
 ArchTest((Algodao_Rond$Valor))
 ArchTest(log(Algodao_Rond$Valor))
 ```
@@ -104,7 +166,11 @@ dfts <- ts(Algodao_Rond$Valor, frequency=237, start=c(2017,06,01))
 
 
 ```{r}
-decompose(dfts) %>% autoplot()
+dc <- decompose(as.ts(dfts, start=c(2017,06,01)), type = "additive")
+
+plot(dc)
+
+
 ```
 
 A decomposição da série dá erro dependendo de como é formada, é preciso indicar exatamente como está funcionando os ciclos de sazonalidade
@@ -222,14 +288,112 @@ plot(forecast(model,h=60))
 
 
 ```
+Ajustes TBATS 
+
+```{r}
+
+model_TBATS<-forecast:::fitSpecificTBATS(dfts,use.box.cox=FALSE, use.beta=TRUE,  seasonal.periods=c(6),use.damping=FALSE,k.vector=c(2))
+accuracy(model_TBATS)
+
+
+```
+```{r}
+N_forecasting_days = 45
+validation_data_days = 15
+model_TBATS
+
+```
+
+```{r}
+plot(model_TBATS,main =paste("Modelo TBATS"),xlab = "Data",ylab = "y_lab")
+
+```
+Predict usando TBATs
+```{r}
+
+forecasting_tbats <- predict(model_TBATS, h=N_forecasting_days+validation_data_days)
+```
+
+
+```{r}
+
+plot(forecasting_tbats,xlab = "Data",ylab = "y_lab")
+
+
+```
+
+
+Tem que separar os dados de testes
+
+
 
 
 # GARCH e ARCH
 
+
+# Método de Naive Bayes
+```{r}
+# Método de Naive Bayes
+n <- 60
+
+Algodao_Rond<- Algodao_Rond %>% select(Data, Valor)
+train <- head(Algodao_Rond$Valor, length(Algodao_Rond$Valor)-n)
+test <- tail(Algodao_Rond$Valor, n)
+
+# Forecast the data
+fc_na <- naive(train, h=n)
+
+# Plot the result
+autoplot(fc_na) +
+  autolayer(ts(test, start=length(train)), series = "Test Data")
+
+```
+
+
 ```{r}
 
+ggplot(Joined, aes(x = Data, y = Valor)) + 
+  geom_line(aes(color = Cidade),size = 1.5) +
+  theme_minimal()
+
+```
+
+```{r}
+
+model <- auto.arima(dfts)
+model
 
 
 ```
+
+```{r}
+
+forecast(model, 48)
+
+autoplot(forecast(model, 48))
+
+
+```
+
+```{r}
+p <- ggplot(Joined, aes(x=Data, y=Valor)) +
+  geom_line(aes(color=Cidade), size=0.8) +
+  theme_minimal() +
+  xlab("") +
+  ylab("Consumer Price Index") +
+  ggtitle("Indonesia's Consumer Price Index", subtitle = "From December 2002 Until April 2020")
+p
+```
+
+
+```{r}
+
+plot.ts(dfts)
+
+```
+
+
+
+
 
 
